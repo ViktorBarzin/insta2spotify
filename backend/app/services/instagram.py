@@ -1,10 +1,25 @@
 import asyncio
 import json
 import logging
+import os
 import tempfile
 from dataclasses import dataclass
 
+from app.config import get_settings
+
 logger = logging.getLogger(__name__)
+
+def _ytdlp_base_args() -> list[str]:
+    """Common yt-dlp args for Instagram access."""
+    settings = get_settings()
+    args = [
+        "yt-dlp",
+        "--no-check-certificates",
+        "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    ]
+    if os.path.exists(settings.instagram_cookies_path):
+        args.extend(["--cookies", settings.instagram_cookies_path])
+    return args
 
 @dataclass
 class InstagramData:
@@ -16,8 +31,9 @@ class InstagramData:
     duration: float = 0
 
 async def extract_metadata(url: str) -> dict:
+    args = _ytdlp_base_args() + ["--dump-json", "--no-download", url]
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "--dump-json", "--no-download", url,
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -29,9 +45,9 @@ async def extract_metadata(url: str) -> dict:
 
 async def download_audio(url: str, output_dir: str) -> str | None:
     output_path = f"{output_dir}/audio.%(ext)s"
+    args = _ytdlp_base_args() + ["-x", "--audio-format", "mp3", "-o", output_path, url]
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "-x", "--audio-format", "mp3",
-        "-o", output_path, url,
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -46,8 +62,9 @@ async def download_audio(url: str, output_dir: str) -> str | None:
 
 async def download_video(url: str, output_dir: str) -> str | None:
     output_path = f"{output_dir}/video.%(ext)s"
+    args = _ytdlp_base_args() + ["-o", output_path, url]
     proc = await asyncio.create_subprocess_exec(
-        "yt-dlp", "-o", output_path, url,
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )

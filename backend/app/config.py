@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = False
 
+    # Instagram
+    instagram_cookies_path: str = "/data/instagram_cookies.txt"
+
     # Audio processing
     segment_duration: int = 15  # seconds per Shazam chunk
     segment_overlap: int = 5   # overlap between chunks
