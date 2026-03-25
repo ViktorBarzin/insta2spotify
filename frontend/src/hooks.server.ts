@@ -8,6 +8,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			method: event.request.method,
 			headers: event.request.headers,
 			body: event.request.method !== 'GET' ? await event.request.text() : undefined,
+			redirect: 'manual',
 		});
 		return new Response(response.body, {
 			status: response.status,
