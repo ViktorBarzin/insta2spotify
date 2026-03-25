@@ -40,3 +40,10 @@ async def get_db():
         yield db
     finally:
         await db.close()
+
+async def get_db_direct() -> aiosqlite.Connection:
+    """Non-generator version for background tasks."""
+    settings = get_settings()
+    db = await aiosqlite.connect(settings.database_path)
+    db.row_factory = aiosqlite.Row
+    return db

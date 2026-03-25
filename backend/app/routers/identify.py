@@ -1,11 +1,12 @@
+import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 import aiosqlite
 
 from app.config import get_settings
-from app.database import get_db
-from app.models import IdentifyRequest, IdentifyResponse, SongResult
+from app.database import get_db, get_db_direct
+from app.models import IdentifyRequest, SongResult
 from app.services.identifier import identify_and_add
 
 logger = logging.getLogger(__name__)
@@ -14,28 +15,16 @@ router = APIRouter()
 async def verify_api_key(x_api_key: str = Header(...)):
     settings = get_settings()
     if not settings.api_key:
-        return  # No key configured, allow all
+        return
     if x_api_key != settings.api_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-@router.post("/identify", response_model=IdentifyResponse)
-async def identify(
-    request: IdentifyRequest,
-    db: aiosqlite.Connection = Depends(get_db),
-    _: None = Depends(verify_api_key),
-):
-    # Create request record
-    cursor = await db.execute(
-        "INSERT INTO requests (instagram_url, status) VALUES (?, ?)",
-        (request.url, "processing"),
-    )
-    request_id = cursor.lastrowid
-    await db.commit()
-
+async def _process_request(request_id: int, url: str):
+    """Background task to identify songs and add to Spotify."""
+    db = await get_db_direct()
     try:
-        songs = await identify_and_add(request.url)
+        songs = await identify_and_add(url)
 
-        # Save identifications
         for song in songs:
             await db.execute(
                 """INSERT INTO identifications
@@ -48,18 +37,32 @@ async def identify(
         status = "success" if any(s.added_to_playlist for s in songs) else "partial" if songs else "no_songs_found"
         await db.execute("UPDATE requests SET status = ? WHERE id = ?", (status, request_id))
         await db.commit()
-
-        return IdentifyResponse(
-            status=status,
-            songs=[SongResult(
-                song=s.song, artist=s.artist, method=s.method,
-                spotify_url=s.spotify_url, added_to_playlist=s.added_to_playlist,
-            ) for s in songs],
-            count=len(songs),
-            request_id=request_id,
-        )
+        logger.info("Request %d completed: %s (%d songs)", request_id, status, len(songs))
     except Exception as e:
-        logger.exception("Identification failed for %s", request.url)
+        logger.exception("Identification failed for request %d: %s", request_id, url)
         await db.execute("UPDATE requests SET status = ? WHERE id = ?", ("error", request_id))
         await db.commit()
-        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await db.close()
+
+@router.post("/identify")
+async def identify(
+    request: IdentifyRequest,
+    background_tasks: BackgroundTasks,
+    db: aiosqlite.Connection = Depends(get_db),
+    _: None = Depends(verify_api_key),
+):
+    cursor = await db.execute(
+        "INSERT INTO requests (instagram_url, status) VALUES (?, ?)",
+        (request.url, "processing"),
+    )
+    request_id = cursor.lastrowid
+    await db.commit()
+
+    background_tasks.add_task(_process_request, request_id, request.url)
+
+    return {
+        "status": "processing",
+        "message": "Request accepted. Songs will be added to playlist in background.",
+        "request_id": request_id,
+    }
