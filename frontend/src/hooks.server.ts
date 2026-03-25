@@ -5,28 +5,44 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 		const targetUrl = `${backendUrl}${event.url.pathname}${event.url.search}`;
 
-		const headers: Record<string, string> = {};
-		const forwardHeaders = ['content-type', 'x-api-key', 'authorization', 'accept'];
-		for (const name of forwardHeaders) {
-			const value = event.request.headers.get(name);
-			if (value) headers[name] = value;
+		try {
+			const headers: Record<string, string> = {};
+			for (const name of ['content-type', 'x-api-key', 'authorization', 'accept']) {
+				const value = event.request.headers.get(name);
+				if (value) headers[name] = value;
+			}
+
+			let body: string | undefined;
+			if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
+				body = await event.request.text();
+			}
+
+			const response = await fetch(targetUrl, {
+				method: event.request.method,
+				headers,
+				body,
+				redirect: 'manual',
+			});
+
+			const responseHeaders = new Headers();
+			response.headers.forEach((value, key) => {
+				if (key.toLowerCase() !== 'transfer-encoding') {
+					responseHeaders.set(key, value);
+				}
+			});
+
+			const responseBody = await response.text();
+			return new Response(responseBody, {
+				status: response.status,
+				headers: responseHeaders,
+			});
+		} catch (err) {
+			console.error('API proxy error:', err);
+			return new Response(JSON.stringify({ error: 'Proxy error', detail: String(err) }), {
+				status: 502,
+				headers: { 'content-type': 'application/json' },
+			});
 		}
-
-		const init: RequestInit = {
-			method: event.request.method,
-			headers,
-			redirect: 'manual',
-		};
-
-		if (event.request.method !== 'GET' && event.request.method !== 'HEAD') {
-			init.body = await event.request.text();
-		}
-
-		const response = await fetch(targetUrl, init);
-		return new Response(response.body, {
-			status: response.status,
-			headers: response.headers,
-		});
 	}
 	return resolve(event);
 };
