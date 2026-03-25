@@ -7,4 +7,4 @@ shazamio>=0.7.0
 easyocr>=1.7.0
 spotipy>=2.24.0
 python-multipart>=0.0.18
-pyaudioop>=0.1.0
+audioop-lts>=0.2.1
