@@ -1,0 +1,23 @@
+when:
+  - event: [manual, push]
+
+steps:
+  - name: check-vars
+    image: alpine
+    commands:
+      - '[ -n "$IMAGE_TAG" ] || (echo "IMAGE_TAG not set, skipping deploy"; exit 78)'
+
+  - name: deploy
+    image: bitnami/kubectl:latest
+    commands:
+      - "kubectl set image deployment/insta2spotify frontend=${FRONTEND_IMAGE}:${IMAGE_TAG} backend=${BACKEND_IMAGE}:${IMAGE_TAG} -n insta2spotify"
+      - "kubectl rollout status deployment/insta2spotify -n insta2spotify --timeout=300s"
+
+  - name: notify
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack-webhook-url
+      channel: general
+    when:
+      - status: [success, failure]
