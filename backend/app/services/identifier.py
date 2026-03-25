@@ -72,7 +72,7 @@ async def identify_and_add(url: str) -> list[IdentifiedSong]:
                 shazam_results = await shazam_identify(
                     ig_data.audio_path,
                     segment_duration=settings.segment_duration,
-                    segment_overlap=settings.segment_overlap,
+                    overlap=settings.segment_overlap,
                 )
                 for sr in shazam_results:
                     all_songs.append(IdentifiedSong(
