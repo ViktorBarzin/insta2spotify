@@ -65,7 +65,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-              "https://ci.viktorbarzin.me/api/repos/REPO_ID/pipelines" \
+              "https://ci.viktorbarzin.me/api/repos/88/pipelines" \
               -H "Authorization: Bearer ${{ secrets.WOODPECKER_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{"branch":"master","variables":{"IMAGE_TAG":"${{ needs.build-backend.outputs.image_tag }}","BACKEND_IMAGE":"viktorbarzin/${{ env.BACKEND_IMAGE }}","FRONTEND_IMAGE":"viktorbarzin/${{ env.FRONTEND_IMAGE }}"}}')
