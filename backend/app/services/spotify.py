@@ -78,17 +78,29 @@ def search_track(song: str, artist: str) -> dict | None:
         }
     return None
 
-def add_to_playlist(track_id: str) -> bool:
+def get_playlist_track_ids() -> set[str]:
+    """Get all track IDs currently in the playlist (paginated)."""
+    settings = get_settings()
+    sp = get_spotify_client()
+    if not sp:
+        return set()
+    ids = set()
+    results = sp.playlist_tracks(settings.spotify_playlist_id)
+    while results:
+        for item in results["items"]:
+            if item["track"]:
+                ids.add(item["track"]["id"])
+        results = sp.next(results) if results["next"] else None
+    return ids
+
+def add_to_playlist(track_id: str, existing_ids: set[str] | None = None) -> bool:
     settings = get_settings()
     sp = get_spotify_client()
     if not sp:
         return False
     try:
-        # Check if already in playlist
-        results = sp.playlist_tracks(settings.spotify_playlist_id)
-        existing_ids = [item["track"]["id"] for item in results["items"] if item["track"]]
-        if track_id in existing_ids:
-            logger.info("Track %s already in playlist", track_id)
+        if existing_ids is not None and track_id in existing_ids:
+            logger.info("Track %s already in playlist (cached check)", track_id)
             return True
         sp.playlist_add_items(settings.spotify_playlist_id, [track_id])
         logger.info("Added track %s to playlist", track_id)

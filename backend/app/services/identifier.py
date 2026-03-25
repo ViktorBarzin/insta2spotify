@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.services.instagram import get_instagram_data
 from app.services.fingerprint import identify_songs as shazam_identify
 from app.services.ocr import identify_songs_ocr
-from app.services.spotify import search_track, add_to_playlist
+from app.services.spotify import search_track, add_to_playlist, get_playlist_track_ids
 
 logger = logging.getLogger(__name__)
 
@@ -84,21 +84,42 @@ async def identify_and_add(url: str) -> list[IdentifiedSong]:
             except Exception as e:
                 logger.warning("Shazam failed: %s", e)
 
-    # Deduplicate
+    # Deduplicate by fuzzy song+artist match
     unique_songs = _deduplicate(all_songs)
 
-    # Search Spotify and add to playlist
+    # Search Spotify for all songs first
     for song in unique_songs:
         try:
             track = search_track(song.song, song.artist)
             if track:
                 song.spotify_track_id = track["id"]
                 song.spotify_url = track["url"]
-                song.added_to_playlist = add_to_playlist(track["id"])
             else:
                 song.error = "Not found on Spotify"
         except Exception as e:
             song.error = str(e)
-            logger.error("Spotify error for %s - %s: %s", song.artist, song.song, e)
+            logger.error("Spotify search error for %s - %s: %s", song.artist, song.song, e)
 
-    return unique_songs
+    # Deduplicate by Spotify track ID (catches cases like OCR "10 Avicii" vs Shazam "Avicii")
+    seen_track_ids: set[str] = set()
+    deduped: list[IdentifiedSong] = []
+    for song in unique_songs:
+        if song.spotify_track_id:
+            if song.spotify_track_id in seen_track_ids:
+                logger.info("Skipping duplicate Spotify track: %s - %s", song.artist, song.song)
+                continue
+            seen_track_ids.add(song.spotify_track_id)
+        deduped.append(song)
+
+    # Get existing playlist tracks once, then add new ones
+    existing_ids = get_playlist_track_ids()
+    for song in deduped:
+        if song.spotify_track_id:
+            try:
+                song.added_to_playlist = add_to_playlist(song.spotify_track_id, existing_ids)
+                existing_ids.add(song.spotify_track_id)
+            except Exception as e:
+                song.error = str(e)
+                logger.error("Spotify add error for %s - %s: %s", song.artist, song.song, e)
+
+    return deduped
