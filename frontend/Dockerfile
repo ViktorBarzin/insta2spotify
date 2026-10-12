@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -8,12 +8,15 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package*.json ./
-RUN npm ci --production
+# The runtime only needs node: drop the bundled npm (and its vulnerable
+# tar/glob/minimatch/sigstore deps) once production deps are installed.
+RUN npm ci --production \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 EXPOSE 3000
 ENV PORT=3000

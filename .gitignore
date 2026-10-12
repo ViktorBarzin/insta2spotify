@@ -9,3 +9,4 @@ data/
 *.egg-info/
 dist/
 .spotify_cache
+.worktrees/
